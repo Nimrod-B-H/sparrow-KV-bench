@@ -4,6 +4,9 @@ node_modules/
 # TypeScript build output
 dist/
 
+# Generated benchmark reports
+reports/*.json
+
 # Logs
 *.log
 npm-debug.log*

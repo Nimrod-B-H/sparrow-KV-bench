@@ -43,30 +43,26 @@ function printSummary(n: number, elapsedMs: number, throughput: number): void {
   console.log('');
 }
 
-// ── Main seeding logic ─────────────────────────────────────────────────────────
-async function seed(n: number): Promise<void> {
+// ── Exported seeding function — throws on error ────────────────────────────────
+export async function seedRedis(n: number, silent = false): Promise<{ elapsedMs: number; throughput: number }> {
+  const log = (msg: string) => { if (!silent) console.log(msg); };
   const redis = new Redis({ host: REDIS_HOST, port: REDIS_PORT, lazyConnect: true });
 
   try {
-    await redis.connect();
-  } catch (err) {
-    console.error(`[ERROR] Cannot connect to Redis on ${REDIS_HOST}:${REDIS_PORT}. Is Redis running?`);
-    process.exit(1);
-  }
+    await redis.connect().catch(() => {
+      throw new Error(`Cannot connect to Redis on ${REDIS_HOST}:${REDIS_PORT}. Is Redis running?`);
+    });
 
-  try {
-    // Always flush before seeding
-    console.log('[INFO]  Flushing keyspace...');
+    log('[INFO]  Flushing keyspace...');
     await redis.flushdb();
-    console.log('[INFO]  Keyspace flushed.');
+    log('[INFO]  Keyspace flushed.');
 
     if (n === 0) {
-      console.log('[INFO]  N=0. Nothing to seed.');
-      printSummary(0, 0, 0);
-      return;
+      log('[INFO]  N=0. Nothing to seed.');
+      return { elapsedMs: 0, throughput: 0 };
     }
 
-    console.log(`[INFO]  Seeding ${n.toLocaleString()} keys in batches of ${BATCH_SIZE.toLocaleString()}...`);
+    log(`[INFO]  Seeding ${n.toLocaleString()} keys in batches of ${BATCH_SIZE.toLocaleString()}...`);
     const startMs = Date.now();
 
     for (let batchStart = 0; batchStart < n; batchStart += BATCH_SIZE) {
@@ -89,36 +85,40 @@ async function seed(n: number): Promise<void> {
         if (err) throw new Error(`Pipeline error on batch starting at index ${batchStart}: ${err.message}`);
       }
 
-      const pct = Math.round((batchEnd / n) * 100);
-      process.stdout.write(`\r[INFO]  Progress: ${batchEnd.toLocaleString()} / ${n.toLocaleString()} keys (${pct}%)`);
+      if (!silent) {
+        const pct = Math.round((batchEnd / n) * 100);
+        process.stdout.write(`\r[INFO]  Progress: ${batchEnd.toLocaleString()} / ${n.toLocaleString()} keys (${pct}%)`);
+      }
     }
 
-    console.log(''); // newline after progress line
+    if (!silent) process.stdout.write('\n');
 
     const elapsedMs = Date.now() - startMs;
 
-    // Verify with DBSIZE
-    console.log('[INFO]  Verifying keyspace size...');
+    log('[INFO]  Verifying keyspace size...');
     const dbSize = await redis.dbsize();
 
     if (dbSize !== n) {
-      console.error(`[ERROR] DBSIZE mismatch. Expected: ${n.toLocaleString()}, Actual: ${dbSize.toLocaleString()}`);
-      process.exit(1);
+      throw new Error(`DBSIZE mismatch. Expected: ${n.toLocaleString()}, Actual: ${dbSize.toLocaleString()}`);
     }
 
-    console.log(`[INFO]  Verification passed. DBSIZE = ${dbSize.toLocaleString()}`);
+    log(`[INFO]  Verification passed. DBSIZE = ${dbSize.toLocaleString()}`);
 
     const throughput = elapsedMs > 0 ? Math.round(n / (elapsedMs / 1000)) : 0;
-    printSummary(n, elapsedMs, throughput);
+    return { elapsedMs, throughput };
 
-  } catch (err) {
-    console.error(`[ERROR] Seeding failed: ${(err as Error).message}`);
-    process.exit(1);
   } finally {
     redis.disconnect();
   }
 }
 
-// ── Entry point ────────────────────────────────────────────────────────────────
-const n = parseN(process.argv.slice(2));
-seed(n);
+// ── CLI entry point ────────────────────────────────────────────────────────────
+if (require.main === module) {
+  const n = parseN(process.argv.slice(2));
+  seedRedis(n, false)
+    .then(({ elapsedMs, throughput }) => printSummary(n, elapsedMs, throughput))
+    .catch(err => {
+      console.error(`[ERROR] ${err.message}`);
+      process.exit(1);
+    });
+}
