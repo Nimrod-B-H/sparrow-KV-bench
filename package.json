@@ -1,0 +1,31 @@
+{
+  "name": "sparrow-kv-bench",
+  "version": "0.1.0",
+  "description": "Key-value database performance benchmarking suite",
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "packageManager": "pnpm@10.33.2",
+  "scripts": {
+    "lint": "eslint . --ext .ts --max-warnings 0",
+    "test:unit": "echo \"No unit tests yet\" && exit 0",
+    "test:bdd": "cucumber-js",
+    "seed": "ts-node scripts/seed/seed-redis.ts"
+  },
+  "dependencies": {
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "^11.0.0",
+    "@types/chai": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "chai": "^5.0.0",
+    "eslint": "^9.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.0"
+  }
+}
