@@ -46,9 +46,11 @@ fi
 # ── Internet connectivity ──────────────────────────────────────────────────────
 check_internet() {
   log "Checking internet connectivity..."
-  curl -sf --max-time 5 https://packages.redis.io > /dev/null 2>&1 \
-    || fail "No internet access. Cannot reach packages.redis.io."
-  log "Internet connectivity confirmed."
+  local http_status
+  http_status=$(curl -s --max-time 5 -o /dev/null -w "%{http_code}" https://packages.redis.io/gpg)
+  [[ "$http_status" =~ ^[23] ]] \
+    || fail "No internet access. Cannot reach packages.redis.io (HTTP ${http_status:-000})."
+  log "Internet connectivity confirmed (HTTP ${http_status})."
 }
 
 # ── CPU check ─────────────────────────────────────────────────────────────────
