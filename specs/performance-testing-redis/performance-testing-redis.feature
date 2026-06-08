@@ -5,7 +5,7 @@ Feature: Performance testing of Redis under varying loads
 
   Background:
     Given a local Redis instance is installed and running
-    And the Redis version is 8.6.1
+    And the Redis version is 8.8.0
     And the system has sufficient resources for testing
 
   Scenario: Setting up the Redis database

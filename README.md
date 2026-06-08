@@ -56,7 +56,7 @@ The Redis workflow should validate:
 ## Prerequisites
 
 - A local Redis instance installed and running.
-- Redis version 8.6.1 for the first benchmark target.
+- Redis version 8.8.0 for the first benchmark target.
 - Sufficient CPU and memory for concurrency testing.
 - A working Node.js or TypeScript test environment for the benchmark scripts.
 - Access to the benchmark data-loading and concurrency scripts.
