@@ -1,0 +1,84 @@
+name: Kickoff Feature Automation
+
+on:
+  issues:
+    types: [opened,reopened]
+
+permissions:
+  issues: write
+  contents: write
+  pull-requests: write
+  models: read
+
+env:
+  AI_MODEL: gpt-4o
+  AI_TEMPERATURE: '0.2'
+  AI_MAX_TOKENS: '8000'
+
+jobs:
+  kickoff-feature:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read prompt files
+        id: prompts
+        run: |
+          {
+            echo "learn_feature_request<<EOF"
+            cat .github/prompts/learn-feature-request.prompt.md
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+          {
+            echo "create_test_plan<<EOF"
+            cat .github/prompts/create-test-plan.prompt.md
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Step 1 - Analyse feature request
+        id: feature-analysis
+        uses: ./.github/actions/call-ai-model
+        with:
+          system_prompt: ${{ steps.prompts.outputs.learn_feature_request }}
+          user_prompt: |
+            Feature: ${{ github.event.issue.title }}
+            Labels: ${{ join(github.event.issue.labels.*.name, ', ') }}
+
+            Description:
+            ${{ github.event.issue.body }}
+          model: ${{ env.AI_MODEL }}
+          temperature: ${{ env.AI_TEMPERATURE }}
+          max_tokens: ${{ env.AI_MAX_TOKENS }}
+          token: ${{ github.token }}
+
+      - name: Step 2 - Generate BDD test plan
+        id: test-plan
+        uses: ./.github/actions/call-ai-model
+        with:
+          system_prompt: ${{ steps.prompts.outputs.create_test_plan }}
+          user_prompt: ${{ steps.feature-analysis.outputs.response_content }}
+          model: ${{ env.AI_MODEL }}
+          temperature: ${{ env.AI_TEMPERATURE }}
+          max_tokens: ${{ env.AI_MAX_TOKENS }}
+          token: ${{ github.token }}
+
+      - name: Step 3 - Write AI outputs to files
+        env:
+          FEATURE_ANALYSIS: ${{ steps.feature-analysis.outputs.response_content }}
+          GENERATED_CONTENT: ${{ steps.test-plan.outputs.response_content }}
+        run: |
+          node -e "require('fs').writeFileSync('/tmp/feature_analysis.txt', process.env.FEATURE_ANALYSIS || '')"
+          node -e "require('fs').writeFileSync('/tmp/generated_content.txt', process.env.GENERATED_CONTENT || '')"
+          echo "--- generated_content.txt (first 300 chars) ---"
+          node -e "process.stdout.write(require('fs').readFileSync('/tmp/generated_content.txt','utf8').substring(0,300))"
+
+      - name: Step 4 - Create branch, files and pull request
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: node .github/scripts/kickoff-feature/index.js

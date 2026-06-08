@@ -1,0 +1,96 @@
+name: Call AI Model
+description: Calls the GitHub Models API with a system and user prompt, returns the response content.
+
+inputs:
+  system_prompt:
+    description: The system prompt to send to the model
+    required: true
+  user_prompt:
+    description: The user prompt to send to the model
+    required: true
+  model:
+    description: The model ID to use
+    required: false
+    default: gpt-4o
+  temperature:
+    description: Sampling temperature
+    required: false
+    default: '0.7'
+  max_tokens:
+    description: Maximum tokens in the response
+    required: false
+    default: '4000'
+  token:
+    description: API token for GitHub Models
+    required: true
+
+outputs:
+  response_content:
+    description: The text content from the model response
+    value: ${{ steps.call-model.outputs.response_content }}
+
+runs:
+  using: composite
+  steps:
+    - name: Call model
+      id: call-model
+      shell: bash
+      env:
+        SYSTEM_PROMPT: ${{ inputs.system_prompt }}
+        USER_PROMPT: ${{ inputs.user_prompt }}
+        MODEL: ${{ inputs.model }}
+        TEMPERATURE: ${{ inputs.temperature }}
+        MAX_TOKENS: ${{ inputs.max_tokens }}
+        MODELS_TOKEN: ${{ inputs.token }}
+      run: |
+        # Node writes the response directly to file — bash never touches the raw AI content
+        node -e "
+          const https = require('https');
+          const fs = require('fs');
+          const body = JSON.stringify({
+            messages: [
+              { role: 'system', content: process.env.SYSTEM_PROMPT },
+              { role: 'user', content: process.env.USER_PROMPT }
+            ],
+            model: process.env.MODEL,
+            temperature: parseFloat(process.env.TEMPERATURE),
+            max_tokens: parseInt(process.env.MAX_TOKENS)
+          });
+
+          const options = {
+            hostname: 'models.inference.ai.azure.com',
+            path: '/chat/completions',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + process.env.MODELS_TOKEN,
+              'Content-Length': Buffer.byteLength(body)
+            }
+          };
+
+          const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+              if (res.statusCode !== 200) {
+                process.stderr.write('API error ' + res.statusCode + ': ' + data + '\n');
+                process.exit(1);
+              }
+              const parsed = JSON.parse(data);
+              fs.writeFileSync('/tmp/ai_response.txt', parsed.choices[0].message.content);
+            });
+          });
+          req.on('error', e => { process.stderr.write(e.message); process.exit(1); });
+          req.write(body);
+          req.end();
+        "
+
+        # Safe to cat — bash never interpolates file contents
+        # Use a unique delimiter so AI content containing 'EOF' doesn't truncate the output
+        DELIMITER="AIRESPONSE_$(openssl rand -hex 16)"
+        {
+          echo "response_content<<${DELIMITER}"
+          cat /tmp/ai_response.txt
+          echo ""
+          echo "${DELIMITER}"
+        } >> $GITHUB_OUTPUT
