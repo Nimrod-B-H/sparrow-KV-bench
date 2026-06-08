@@ -44,6 +44,5 @@ Feature: Performance testing of Redis under varying loads
   Scenario: Testing with a large database size
     Given the database is populated with 1,000,000 keys
     When the concurrency testing script is executed
-    Then the system handles the load without crashing
-    Or an appropriate error is logged
+    Then the system handles the load without crashing or logs an appropriate error
     And the system maintains consistent performance metrics across multiple runs
